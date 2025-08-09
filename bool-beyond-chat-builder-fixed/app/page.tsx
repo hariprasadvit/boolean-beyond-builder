@@ -1,10 +1,20 @@
-import React from 'react';
+'use client';
+import React, { useEffect } from 'react';
 import ChatFlow from '@/components/ChatFlow';
 
 export default function HomePage() {
+  useEffect(()=>{
+    // If hash asks to open chat
+    if (typeof window !== 'undefined' && window.location.hash.includes('builder')) {
+      (window as any).openChat?.();
+    }
+  },[]);
+
+  const clickIndustry = (i:string)=> (window as any).prefillIndustry?.(i);
+
   return (
     <main>
-      <header className="border-b border-[#1f1f1f]">
+      <header className="border-b border-[#1f1f1f] sticky top-0 z-20 bg-[#0b0b0b]/70 backdrop-blur">
         <div className="container py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-[var(--color-primary)]"></div>
@@ -29,7 +39,7 @@ export default function HomePage() {
           A chat-led builder that prototypes your flow and creates a requirement sheet—automatically.
         </p>
         <div className="mt-6 flex gap-3">
-          <a href="#builder" className="btn btn-primary">Start in Chat</a>
+          <a href="#builder" className="btn btn-primary" onClick={()=> (window as any).openChat?.() }>Start in Chat</a>
           <a href="/demos/real-estate/plot-booking" className="btn btn-secondary">Try a Real Estate Demo</a>
         </div>
       </section>
@@ -40,10 +50,11 @@ export default function HomePage() {
             <h2 className="text-xl font-semibold">Industry Shortcuts</h2>
             <div className="grid grid-cols-2 gap-3 mt-4">
               {['Real Estate','FinTech','EdTech','Healthcare','Retail','Logistics','Other'].map(i=> (
-                <div key={i} className="card p-4">
+                <button key={i} className="card p-4 text-left hover:scale-[1.01] transition"
+                        onClick={()=> clickIndustry(i)}>
                   <div className="font-medium">{i}</div>
-                  <div className="text-xs text-neutral-400 mt-1">Click from chat panel</div>
-                </div>
+                  <div className="text-xs text-neutral-400 mt-1">Prefill chat with this industry</div>
+                </button>
               ))}
             </div>
           </div>
@@ -66,6 +77,15 @@ export default function HomePage() {
             <p className="text-sm text-neutral-300">Preview a demo with holds, booking, and confirmation.</p>
           </div>
           <a className="btn btn-primary" href="/demos/real-estate/plot-booking">Open Demo</a>
+        </div>
+      </section>
+
+      <section className="container py-10" id="logos">
+        <div className="text-sm text-neutral-400 mb-4">Trusted by teams (placeholders)</div>
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 opacity-70">
+          {Array.from({length:6}).map((_,i)=>(
+            <div key={i} className="card h-12 flex items-center justify-center">Logo</div>
+          ))}
         </div>
       </section>
 

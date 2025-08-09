@@ -1,5 +1,5 @@
 'use client';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import BrandThemeExtractor from './BrandThemeExtractor';
 import { jsPDF } from 'jspdf';
 
@@ -23,19 +23,35 @@ type Answers = {
 };
 
 const INDUSTRIES = ['Real Estate','FinTech','EdTech','Healthcare','Retail','Logistics','Other'];
-const REAL_ESTATE_PROBLEMS = [
-  'Plot blocking & booking', 'Site visit scheduling', 'Payments & invoicing', 'CRM for leads'
-];
+const REAL_ESTATE_PROBLEMS = ['Plot blocking & booking','Site visit scheduling','Payments & invoicing','CRM for leads'];
 
 export default function ChatFlow() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [ans, setAns] = useState<Answers>({});
+  const [sent, setSent] = useState(false);
 
   const go = (n:number)=> setStep(n);
 
-  const onFinish = async () => {
-    // Create Requirement Sheet PDF (simple 1-pager)
+  // expose prefill so industry cards can jump into the flow
+  useEffect(()=>{
+    (window as any).openChat = ()=> setOpen(true);
+    (window as any).prefillIndustry = (i:string)=> { setOpen(true); setAns(a=>({...a, industry:i})); setStep(1); };
+  },[]);
+
+  const validateStep4 = () => {
+    if (!ans.company || !ans.contactName || !ans.email) return false;
+    return true;
+  };
+
+  const buildPayload = () => ({
+    ...ans,
+    answers: ans,
+    demoUrl: '/demos/real-estate/plot-booking',
+    timestamp: new Date().toISOString()
+  });
+
+  const downloadPDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.text('Requirement Sheet — Boolean & Beyond', 14, 18);
@@ -58,10 +74,20 @@ export default function ChatFlow() {
     ];
     let y = 30;
     lines.forEach(l=> { doc.text(l, 14, y); y+=8; });
-    const pdfBlob = doc.output('blob');
-    const url = URL.createObjectURL(pdfBlob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'Requirement-Sheet.pdf'; a.click();
+    doc.save('Requirement-Sheet.pdf');
+  };
+
+  const sendToUs = async () => {
+    const res = await fetch('/api/intake', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(buildPayload())
+    });
+    const ok = res.ok;
+    setSent(ok);
+    (window as any).dataLayer = (window as any).dataLayer || [];
+    (window as any).dataLayer.push({event:'lead_submitted', ok});
+    console.log('[metrics] lead_submitted', ok);
   };
 
   return (
@@ -69,7 +95,7 @@ export default function ChatFlow() {
       {/* Trigger button */}
       <button
         className="fixed bottom-6 right-6 btn btn-primary shadow-soft"
-        onClick={()=>setOpen(v=>!v)}
+        onClick={()=>{ setOpen(v=>!v); if (!open) console.log('[metrics] chat_started'); }}
         aria-label="Open chat builder"
       >
         {open ? 'Close Builder' : 'Start in Chat'}
@@ -77,7 +103,7 @@ export default function ChatFlow() {
 
       {/* Panel */}
       {open && (
-        <div className="fixed bottom-20 right-6 w-[360px] max-h-[75vh] card p-4 overflow-y-auto">
+        <div className="fixed bottom-20 right-6 w-[380px] max-h-[75vh] card p-4 overflow-y-auto">
           <h3 className="text-lg font-semibold mb-2">Conversational Builder</h3>
 
           {step===0 && (
@@ -86,7 +112,7 @@ export default function ChatFlow() {
               <div className="grid grid-cols-2 gap-2">
                 {INDUSTRIES.map(i=> (
                   <button key={i} className="btn bg-[#1a1a1a] hover:bg-[#222] rounded-xl"
-                    onClick={()=>{ setAns({...ans, industry:i}); go(1);}}>{i}</button>
+                    onClick={()=>{ setAns({...ans, industry:i}); setStep(1); console.log('[metrics] industry_selected', i); }}>{i}</button>
                 ))}
               </div>
             </div>
@@ -97,12 +123,12 @@ export default function ChatFlow() {
               <p className="text-sm text-neutral-300">What do you need?</p>
               {(ans.industry==='Real Estate' ? REAL_ESTATE_PROBLEMS : ['Describe your need']).map(p=> (
                 <button key={p} className="btn bg-[#1a1a1a] hover:bg-[#222] rounded-xl w-full text-left"
-                  onClick={()=>{ setAns({...ans, problem:p}); go(2);}}>{p}</button>
+                  onClick={()=>{ setAns({...ans, problem:p}); setStep(2); console.log('[metrics] solution_selected', p); }}>{p}</button>
               ))}
               {ans.industry!=='Real Estate' && (
                 <input className="w-full rounded-xl px-3 py-2 bg-[#1a1a1a] border border-[#2a2a2a] text-sm"
                   placeholder="Type your need…"
-                  onKeyDown={(e:any)=>{ if(e.key==='Enter'){ setAns({...ans, problem:e.target.value}); go(2);} }}
+                  onKeyDown={(e:any)=>{ if(e.key==='Enter'){ setAns({...ans, problem:e.target.value}); setStep(2);} }}
                 />
               )}
             </div>
@@ -111,11 +137,9 @@ export default function ChatFlow() {
           {step===2 && (
             <div className="space-y-3">
               <p className="text-sm text-neutral-300">Select a solution pattern</p>
-              {(ans.problem==='Plot blocking & booking'
-                ? ['Plot Booking Flow Demo']
-                : ['Standard Prototype']).map(s=> (
+              {(ans.problem==='Plot blocking & booking' ? ['Plot Booking Flow Demo'] : ['Standard Prototype']).map(s=> (
                 <button key={s} className="btn bg-[#1a1a1a] hover:bg-[#222] rounded-xl w-full text-left"
-                  onClick={()=>{ setAns({...ans, solution:s}); go(3);}}>{s}</button>
+                  onClick={()=>{ setAns({...ans, solution:s}); setStep(3); }}>{s}</button>
               ))}
               <div className="text-xs text-neutral-400">You can preview the demo after theming.</div>
             </div>
@@ -125,8 +149,8 @@ export default function ChatFlow() {
             <div className="space-y-3">
               <BrandThemeExtractor onTheme={(t)=> setAns({...ans, themeTokens:t})} />
               <div className="flex items-center justify-between">
-                <button className="btn bg-[#1a1a1a]" onClick={()=>go(2)}>Back</button>
-                <button className="btn btn-primary" onClick={()=>go(4)}>Next</button>
+                <button className="btn bg-[#1a1a1a]" onClick={()=>setStep(2)}>Back</button>
+                <button className="btn btn-primary" onClick={()=>setStep(4)}>Next</button>
               </div>
             </div>
           )}
@@ -143,20 +167,25 @@ export default function ChatFlow() {
               ))}
               <div className="flex items-center justify-between mt-2">
                 <a href="/demos/real-estate/plot-booking" className="btn btn-secondary">Open Prototype</a>
-                <button className="btn btn-primary" onClick={()=>go(5)}>Next</button>
+                <button className="btn btn-primary disabled:opacity-50" disabled={!validateStep4()} onClick={()=>setStep(5)}>Next</button>
               </div>
+              {!validateStep4() && <p className="text-xs text-amber-400 mt-1">Company, Contact and Email are required.</p>}
             </div>
           )}
 
-          {step===5 && (
+          {step===5 && !sent && (
             <div className="space-y-3">
               <p className="text-sm text-neutral-300">Generate outputs</p>
-              <button className="btn btn-primary w-full" onClick={onFinish}>Download Requirement Sheet (PDF)</button>
-              <form action="/api/intake" method="post">
-                <input type="hidden" name="payload" value="" />
-                <button className="btn bg-[#1a1a1a] w-full mt-2">Send to Boolean & Beyond</button>
-              </form>
+              <button className="btn btn-primary w-full" onClick={downloadPDF}>Download Requirement Sheet (PDF)</button>
+              <button className="btn bg-[#1a1a1a] w-full mt-2" onClick={sendToUs}>Send to Boolean & Beyond</button>
               <p className="text-xs text-neutral-500">We’ll reach out within 1 business day.</p>
+            </div>
+          )}
+
+          {step===5 && sent && (
+            <div className="space-y-3">
+              <p className="text-sm">✅ Thanks! We received your details.</p>
+              <button className="btn btn-secondary w-full" onClick={()=>setOpen(false)}>Close</button>
             </div>
           )}
         </div>
